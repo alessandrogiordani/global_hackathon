@@ -1,0 +1,8 @@
+# Databricks App Configuration
+# Auto-synced from config.env - DO NOT EDIT MANUALLY
+bundle:
+  name: ing_hackathon_sca
+  
+targets:
+  prod:
+    mode: production

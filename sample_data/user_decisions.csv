@@ -1,0 +1,6 @@
+decision_id,repo_id,target_version,decision,user_email,decision_reason,decision_ts
+d001-uuid-1111,repo_001,2.15.0,approved,security.admin@company.com,High confidence analysis - proceeding with upgrade,2026-02-01 14:30:00
+d002-uuid-2222,repo_002,2.21.0,approved,platform.lead@company.com,Critical Log4j vulnerability - must upgrade immediately,2026-02-02 16:00:00
+d003-uuid-3333,repo_003,3.2.0,rejected,backend.lead@company.com,Too many breaking changes - selecting patch version instead,2026-02-03 11:00:00
+d004-uuid-4444,repo_003,2.7.18,approved,backend.lead@company.com,Safe patch version with minimal changes,2026-02-03 11:15:00
+d005-uuid-5555,repo_006,5.8.9,approved,security.team@company.com,Choosing safe upgrade path for Spring Security,2026-02-04 12:00:00

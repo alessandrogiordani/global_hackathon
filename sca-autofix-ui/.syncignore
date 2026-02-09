@@ -1,0 +1,48 @@
+# ========================================================================
+# .syncignore - Only sync what the app needs to run
+# ========================================================================
+
+# Local deployment files (not needed in runtime)
+deploy.sh
+config.env
+databricks.yml
+
+# Documentation (keep only README in workspace)
+*.md
+!README.md
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE files
+.vscode/
+.idea/
+.cursor/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Databricks bundle files (not for Apps)
+pyproject.toml
+resources/
+fixtures/
+src/
+tests/
+
+# Logs
+*.log

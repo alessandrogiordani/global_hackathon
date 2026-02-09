@@ -1,0 +1,25 @@
+# Core dependencies
+fastapi>=0.109.0
+uvicorn>=0.27.0
+mcp>=1.0.0
+fastmcp>=0.1.0
+
+# Databricks
+databricks-sdk>=0.20.0
+
+# Data processing
+pandas>=2.0.0
+pydantic>=2.5.0
+
+# Java analysis
+javalang>=0.13.0
+
+# HTTP client
+httpx>=0.26.0
+requests>=2.31.0
+
+# Git operations
+gitpython>=3.1.40
+
+# Utilities
+python-dotenv>=1.0.0

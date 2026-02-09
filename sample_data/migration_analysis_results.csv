@@ -1,0 +1,11 @@
+migration_id,repo_id,library,from_version,to_version,breaking_changes_count,affected_files,affected_invocations,patches_generated,patches_high_confidence,patches_medium_confidence,patches_low_confidence,migration_complexity,estimated_effort_hours,auto_fixable_percent,analysis_ts,status
+m001-uuid-aaaa,repo_001,jackson-databind,2.9.8,2.15.0,3,3,7,7,5,2,0,medium,1.5,71.4,2026-02-01 11:00:00,completed
+m002-uuid-bbbb,repo_002,log4j-core,2.14.1,2.21.0,2,2,4,4,4,0,0,low,0.8,100.0,2026-02-02 15:00:00,completed
+m003-uuid-cccc,repo_003,spring-boot,2.7.0,3.2.0,12,8,23,18,8,6,4,high,4.2,44.4,2026-02-03 10:00:00,pending_review
+m004-uuid-dddd,repo_003,spring-boot,2.7.0,2.7.18,1,1,2,2,2,0,0,low,0.3,100.0,2026-02-03 10:05:00,approved
+m005-uuid-eeee,repo_005,jackson-databind,2.10.0,2.15.0,2,4,9,9,7,2,0,medium,1.8,77.8,2026-02-04 09:00:00,completed
+m006-uuid-ffff,repo_005,snakeyaml,1.30,2.2,4,3,6,5,3,1,1,medium,1.5,60.0,2026-02-04 09:15:00,pending_review
+m007-uuid-gggg,repo_006,spring-security,5.6.0,6.2.0,8,6,15,12,6,4,2,high,3.5,50.0,2026-02-04 11:00:00,pending_review
+m008-uuid-hhhh,repo_006,spring-security,5.6.0,5.8.9,2,2,5,5,5,0,0,low,0.7,100.0,2026-02-04 11:05:00,approved
+m009-uuid-iiii,repo_007,gson,2.8.6,2.10.1,1,1,3,3,3,0,0,low,0.4,100.0,2026-02-04 16:00:00,completed
+m010-uuid-jjjj,repo_009,netty,4.1.68,4.1.100,3,2,8,7,5,2,0,medium,1.2,71.4,2026-02-05 12:00:00,completed

@@ -1,0 +1,9 @@
+analysis_id,repo_id,target_version,code_changes_files,code_changes_callsites,confidence,breaking_changes,analysis_ts,notes
+a001-uuid-1234,repo_001,2.15.0,3,7,0.85,"[""ObjectMapper.enableDefaultTyping() removed - use activateDefaultTyping()"", ""JsonNode.get() deprecated - use path() for null-safe access""]",2026-02-01 11:00:00,Migration requires updating 3 files with ObjectMapper configuration changes
+a002-uuid-5678,repo_001,2.14.2,3,7,0.82,"[""ObjectMapper.enableDefaultTyping() removed - use activateDefaultTyping()""]",2026-02-01 11:05:00,Slightly older version but still safe
+a003-uuid-9012,repo_002,2.21.0,2,4,0.95,"[""Logger.getLogger() changed to LogManager.getLogger()"", ""PatternLayout constructor signature changed""]",2026-02-02 15:00:00,Clean migration path with high confidence
+a004-uuid-3456,repo_003,3.2.0,8,23,0.65,"[""WebSecurityConfigurerAdapter removed - use SecurityFilterChain"", ""spring.factories deprecated - use AutoConfiguration.imports"", ""javax.* packages moved to jakarta.*""]",2026-02-03 10:00:00,Major version upgrade with significant breaking changes - manual review recommended
+a005-uuid-7890,repo_003,2.7.18,1,2,0.92,"[""Minor security patch - no breaking changes""]",2026-02-03 10:05:00,Recommended: Safe patch version within same major version
+a006-uuid-2345,repo_005,2.15.0,4,9,0.78,"[""SnakeYaml constructor changes"", ""Jackson TypeReference usage updated""]",2026-02-04 09:00:00,Multiple library updates in same repo
+a007-uuid-6789,repo_006,6.2.0,6,15,0.70,"[""SecurityFilterChain replaces WebSecurityConfigurerAdapter"", ""PasswordEncoder bean configuration changed"", ""OAuth2 client configuration restructured""]",2026-02-04 11:00:00,Spring Security 6 requires significant refactoring
+a008-uuid-0123,repo_006,5.8.9,2,5,0.88,"[""Minor method signature changes""]",2026-02-04 11:05:00,Safe upgrade within Spring Security 5.x
