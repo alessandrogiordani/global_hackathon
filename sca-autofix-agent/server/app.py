@@ -14,18 +14,13 @@ from pathlib import Path
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse, FileResponse
 from starlette.routing import Route, Mount
-#from mcp.server.fastmcp import FastMCP
 from fastmcp import FastMCP
 
 from .tools import load_tools
 from .utils import header_store
 
-# Create MCP server instance with stateless HTTP mode for scalability
-mcp_server = FastMCP(
-    name="mcp-sca-autofix-agent",
-    stateless_http=True,
-    json_response=True
-)
+# Create MCP server instance
+mcp_server = FastMCP(name="mcp-sca-autofix-agent")
 
 # Static files directory (for web UI if needed)
 STATIC_DIR = Path(__file__).parent.parent / "static"
@@ -33,9 +28,6 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 # Load and register all vulnerability scanning tools with the MCP server
 # Tools are defined in server/tools.py
 load_tools(mcp_server)
-
-# Configure the MCP server to mount at /mcp
-mcp_server.settings.streamable_http_path = "/"
 
 
 # ============================================================================
@@ -71,12 +63,12 @@ async def health_check(request):
 # ============================================================================
 
 # Create the final application by combining MCP routes with custom API routes
-# For stateless HTTP mode, no explicit session_manager lifespan is needed
+# Use http_app() for fastmcp package
 combined_app = Starlette(
     routes=[
         Route("/", serve_index),
         Route("/health", health_check),
-        Mount("/mcp", app=mcp_server.streamable_http_app()),
+        Mount("/mcp", app=mcp_server.http_app()),
     ],
 )
 
