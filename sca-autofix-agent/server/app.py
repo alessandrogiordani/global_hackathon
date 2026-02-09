@@ -5,15 +5,15 @@ This module sets up the core application by:
 1. Creating and configuring the FastMCP server instance
 2. Loading and registering all MCP vulnerability scanning tools
 3. Setting up CORS middleware for cross-origin requests
-4. Combining MCP routes with standard FastAPI routes
+4. Using FastMCP's custom_route decorator for additional endpoints
 5. Optionally serving static files for a web frontend
 """
 
 from pathlib import Path
 
-from starlette.applications import Starlette
+from starlette.requests import Request
 from starlette.responses import JSONResponse, FileResponse
-from starlette.routing import Route, Mount
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastmcp import FastMCP
 
 from .tools import load_tools
@@ -31,10 +31,11 @@ load_tools(mcp_server)
 
 
 # ============================================================================
-# Custom Routes
+# Custom Routes using FastMCP's custom_route decorator
 # ============================================================================
 
-async def serve_index(request):
+@mcp_server.custom_route("/", methods=["GET"])
+async def serve_index(request: Request):
     """Serve the index page or health check."""
     if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
         return FileResponse(STATIC_DIR / "index.html")
@@ -50,7 +51,8 @@ async def serve_index(request):
         })
 
 
-async def health_check(request):
+@mcp_server.custom_route("/health", methods=["GET"])
+async def health_check(request: Request):
     """Health check endpoint."""
     return JSONResponse({
         "status": "healthy",
@@ -59,30 +61,30 @@ async def health_check(request):
 
 
 # ============================================================================
-# Combined Application Setup
+# Header Capture Middleware for Databricks Authentication
 # ============================================================================
 
-# Create the final application by combining MCP routes with custom API routes
-# Use http_app() for fastmcp package
-combined_app = Starlette(
-    routes=[
-        Route("/", serve_index),
-        Route("/health", health_check),
-        Mount("/mcp", app=mcp_server.http_app()),
-    ],
-)
-
-
-# Middleware to capture request headers for user authentication
-@combined_app.middleware("http")
-async def capture_headers(request, call_next):
+class HeaderCaptureMiddleware(BaseHTTPMiddleware):
     """
     Middleware to capture request headers for authentication.
-
+    
     This is critical for user-level authentication when deployed as a
     Databricks App. The x-forwarded-access-token header contains the
     OAuth token for the end user.
     """
-    header_store.set(dict(request.headers))
-    return await call_next(request)
+    async def dispatch(self, request: Request, call_next):
+        header_store.set(dict(request.headers))
+        return await call_next(request)
+
+
+# ============================================================================
+# Combined Application Setup
+# ============================================================================
+
+# Use http_app() which serves MCP at /mcp by default
+# Custom routes (/, /health) are automatically included
+_base_app = mcp_server.http_app()
+
+# Wrap with middleware for header capture
+combined_app = HeaderCaptureMiddleware(_base_app)
 
