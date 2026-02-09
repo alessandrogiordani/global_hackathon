@@ -57,7 +57,7 @@ class UCIntegration:
         """
         self.catalog = catalog
         self.schema = schema
-        self.spark = None
+        self._connection = None
         self._mock_mode = not _is_production_mode()
 
         if self._mock_mode:
@@ -65,26 +65,59 @@ class UCIntegration:
         else:
             logger.info(f"🔷 UCIntegration running in PRODUCTION mode (UC: {catalog}.{schema})")
 
-    def _get_spark(self):
-        """Get or create Spark session."""
+    def _get_connection(self):
+        """Get Databricks SQL connection using SDK authentication."""
         if self._mock_mode:
             return None
 
-        if self.spark is None:
+        if self._connection is None:
             try:
-                from pyspark.sql import SparkSession
-
-                self.spark = SparkSession.builder.getOrCreate()
-                logger.info(f"✅ Connected to Spark session")
-            except ImportError:
-                logger.error(
-                    "❌ PySpark not available. This tool only works in Databricks runtime."
+                from databricks import sql
+                from databricks.sdk import WorkspaceClient
+                
+                # Use Databricks SDK for authentication (works in Databricks Apps)
+                w = WorkspaceClient()
+                
+                # Get SQL warehouse or serverless endpoint
+                # For Databricks Apps, we use the serverless SQL warehouse
+                self._connection = sql.connect(
+                    server_hostname=w.config.host.replace("https://", ""),
+                    http_path="/sql/1.0/warehouses/auto",  # Serverless
+                    credentials_provider=lambda: w.config.authenticate,
                 )
+                logger.info("✅ Connected to Databricks SQL")
+            except ImportError as e:
+                logger.error(f"❌ databricks-sql-connector not available: {e}")
                 raise RuntimeError(
-                    "PySpark is required for UC integration. "
-                    "This tool must run in Databricks environment."
+                    "databricks-sql-connector is required for UC integration. "
+                    "Install with: pip install databricks-sql-connector"
                 )
-        return self.spark
+            except Exception as e:
+                logger.error(f"❌ Failed to connect to Databricks SQL: {e}")
+                raise
+        return self._connection
+
+    def _execute_query(self, query: str, fetch: bool = True) -> pd.DataFrame:
+        """Execute SQL query and return results as DataFrame.
+        
+        Args:
+            query: SQL query to execute
+            fetch: Whether to fetch results (False for INSERT/UPDATE)
+            
+        Returns:
+            DataFrame with results, or empty DataFrame for non-SELECT queries
+        """
+        connection = self._get_connection()
+        cursor = connection.cursor()
+        try:
+            cursor.execute(query)
+            if fetch and cursor.description:
+                columns = [desc[0] for desc in cursor.description]
+                rows = cursor.fetchall()
+                return pd.DataFrame(rows, columns=columns)
+            return pd.DataFrame()
+        finally:
+            cursor.close()
 
     def _load_mock_data(self) -> pd.DataFrame:
         """Load mock data from CSV file."""
@@ -161,10 +194,8 @@ class UCIntegration:
                 raise
 
         # =====================================================================
-        # PRODUCTION MODE: Query Unity Catalog
+        # PRODUCTION MODE: Query Unity Catalog via Databricks SQL
         # =====================================================================
-        spark = self._get_spark()
-
         try:
             # Build query - flat schema (one row per repo+library)
             query = f"""
@@ -209,8 +240,19 @@ class UCIntegration:
 
             logger.info(f"📊 Querying UC table: {query}")
 
-            df = spark.sql(query)
-            repos = df.toPandas().to_dict("records")
+            df = self._execute_query(query)
+            
+            # Parse JSON columns if they're strings
+            if "cve_ids" in df.columns:
+                df["cve_ids"] = df["cve_ids"].apply(
+                    lambda x: json.loads(x) if isinstance(x, str) else x
+                )
+            if "candidate_versions" in df.columns:
+                df["candidate_versions"] = df["candidate_versions"].apply(
+                    lambda x: json.loads(x) if isinstance(x, str) else x
+                )
+            
+            repos = df.to_dict("records")
 
             logger.info(f"✅ Retrieved {len(repos)} repos from UC")
             return repos
@@ -260,43 +302,34 @@ class UCIntegration:
             return analysis_id
 
         # =====================================================================
-        # PRODUCTION MODE: Write to Unity Catalog
+        # PRODUCTION MODE: Write to Unity Catalog via SQL
         # =====================================================================
-        spark = self._get_spark()
-
         try:
-            # Create DataFrame
-            data = [
-                (
-                    analysis_id,
-                    repo_id,
-                    target_version,
-                    code_changes_files,
-                    code_changes_callsites,
-                    float(confidence),
-                    breaking_changes,
-                    analysis_ts,
-                    notes,
-                )
-            ]
+            # Escape string values and format for SQL
+            breaking_changes_json = json.dumps(breaking_changes).replace("'", "''")
+            notes_escaped = notes.replace("'", "''")
+            analysis_ts_str = analysis_ts.strftime("%Y-%m-%d %H:%M:%S")
 
-            columns = [
-                "analysis_id",
-                "repo_id",
-                "target_version",
-                "code_changes_files",
-                "code_changes_callsites",
-                "confidence",
-                "breaking_changes",
-                "analysis_ts",
-                "notes",
-            ]
-
-            df = spark.createDataFrame(data, columns)
-
-            # Write to UC table
             table_name = f"{self.catalog}.{self.schema}.agent_analysis_results"
-            df.write.mode("append").saveAsTable(table_name)
+            
+            insert_sql = f"""
+                INSERT INTO {table_name} 
+                (analysis_id, repo_id, target_version, code_changes_files, 
+                 code_changes_callsites, confidence, breaking_changes, analysis_ts, notes)
+                VALUES (
+                    '{analysis_id}',
+                    '{repo_id}',
+                    '{target_version}',
+                    {code_changes_files},
+                    {code_changes_callsites},
+                    {float(confidence)},
+                    '{breaking_changes_json}',
+                    '{analysis_ts_str}',
+                    '{notes_escaped}'
+                )
+            """
+            
+            self._execute_query(insert_sql, fetch=False)
 
             logger.info(f"✅ Wrote analysis result {analysis_id} to UC")
             return analysis_id
@@ -341,39 +374,31 @@ class UCIntegration:
             return decision_id
 
         # =====================================================================
-        # PRODUCTION MODE: Write to Unity Catalog
+        # PRODUCTION MODE: Write to Unity Catalog via SQL
         # =====================================================================
-        spark = self._get_spark()
-
         try:
-            # Create DataFrame
-            data = [
-                (
-                    decision_id,
-                    repo_id,
-                    target_version,
-                    decision,
-                    user_email,
-                    decision_reason,
-                    decision_ts,
-                )
-            ]
+            # Escape string values for SQL
+            decision_reason_escaped = decision_reason.replace("'", "''")
+            decision_ts_str = decision_ts.strftime("%Y-%m-%d %H:%M:%S")
 
-            columns = [
-                "decision_id",
-                "repo_id",
-                "target_version",
-                "decision",
-                "user_email",
-                "decision_reason",
-                "decision_ts",
-            ]
-
-            df = spark.createDataFrame(data, columns)
-
-            # Write to UC table
             table_name = f"{self.catalog}.{self.schema}.user_decisions"
-            df.write.mode("append").saveAsTable(table_name)
+            
+            insert_sql = f"""
+                INSERT INTO {table_name} 
+                (decision_id, repo_id, target_version, decision, user_email, 
+                 decision_reason, decision_ts)
+                VALUES (
+                    '{decision_id}',
+                    '{repo_id}',
+                    '{target_version}',
+                    '{decision}',
+                    '{user_email}',
+                    '{decision_reason_escaped}',
+                    '{decision_ts_str}'
+                )
+            """
+            
+            self._execute_query(insert_sql, fetch=False)
 
             logger.info(f"✅ Recorded decision {decision_id} to UC")
             return decision_id
@@ -401,10 +426,8 @@ class UCIntegration:
             return True
 
         # =====================================================================
-        # PRODUCTION MODE: Update in Unity Catalog
+        # PRODUCTION MODE: Update in Unity Catalog via SQL
         # =====================================================================
-        spark = self._get_spark()
-
         try:
             # Update using SQL
             query = f"""
@@ -413,7 +436,7 @@ class UCIntegration:
                 WHERE repo_id = '{repo_id}'
             """
 
-            spark.sql(query)
+            self._execute_query(query, fetch=False)
             logger.info(f"✅ Updated repo {repo_id} status to {new_status}")
             return True
 
@@ -440,10 +463,8 @@ class UCIntegration:
             return []
 
         # =====================================================================
-        # PRODUCTION MODE: Query Unity Catalog
+        # PRODUCTION MODE: Query Unity Catalog via SQL
         # =====================================================================
-        spark = self._get_spark()
-
         try:
             query = f"""
                 SELECT *
@@ -453,8 +474,8 @@ class UCIntegration:
                 LIMIT {limit}
             """
 
-            df = spark.sql(query)
-            results = df.toPandas().to_dict("records")
+            df = self._execute_query(query)
+            results = df.to_dict("records")
 
             logger.info(f"✅ Retrieved {len(results)} analysis results for {repo_id}")
             return results
@@ -488,7 +509,6 @@ class UCIntegration:
         Returns:
             List of repo dictionaries with keys: repo_url, ref, repo_name
         """
-        spark = self._get_spark()
         cat = catalog or self.catalog
         sch = schema or self.schema
 
@@ -504,8 +524,8 @@ class UCIntegration:
 
             logger.info(f"📊 Querying Java repos from: {cat}.{sch}.{table}")
 
-            df = spark.sql(query)
-            repos = df.toPandas().to_dict("records")
+            df = self._execute_query(query)
+            repos = df.to_dict("records")
 
             logger.info(f"✅ Retrieved {len(repos)} Java repos to scan")
             return repos
@@ -533,56 +553,44 @@ class UCIntegration:
         Returns:
             Number of rows written
         """
-        spark = self._get_spark()
         cat = catalog or self.catalog
         sch = schema or self.schema
 
         try:
             analysis_ts = datetime.now()
-
-            # Prepare data for writing
-            rows = []
-            for result in results:
-                rows.append(
-                    (
-                        str(uuid.uuid4()),  # analysis_id
-                        result.get("repo_url"),
-                        result.get("repo_name"),
-                        result.get("ref"),
-                        result.get("total_files", 0),
-                        result.get("total_calls", 0),
-                        result.get("parse_success_count", 0),
-                        result.get("parse_error_count", 0),
-                        result.get("summary", {}),
-                        analysis_ts,
-                        result.get("status", "success"),
-                        result.get("error"),
-                    )
-                )
-
-            columns = [
-                "analysis_id",
-                "repo_url",
-                "repo_name",
-                "ref",
-                "total_files",
-                "total_calls",
-                "parse_success_count",
-                "parse_error_count",
-                "summary",
-                "analysis_ts",
-                "status",
-                "error",
-            ]
-
-            df = spark.createDataFrame(rows, columns)
-
-            # Write to UC table
+            analysis_ts_str = analysis_ts.strftime("%Y-%m-%d %H:%M:%S")
             table_name = f"{cat}.{sch}.{table}"
-            df.write.mode("append").saveAsTable(table_name)
 
-            logger.info(f"✅ Wrote {len(rows)} Java analysis results to {table_name}")
-            return len(rows)
+            # Insert each result as a separate row
+            for result in results:
+                analysis_id = str(uuid.uuid4())
+                summary_json = json.dumps(result.get("summary", {})).replace("'", "''")
+                error_val = result.get("error")
+                error_escaped = f"'{error_val.replace(chr(39), chr(39)+chr(39))}'" if error_val else "NULL"
+                
+                insert_sql = f"""
+                    INSERT INTO {table_name} 
+                    (analysis_id, repo_url, repo_name, ref, total_files, total_calls,
+                     parse_success_count, parse_error_count, summary, analysis_ts, status, error)
+                    VALUES (
+                        '{analysis_id}',
+                        '{result.get("repo_url", "")}',
+                        '{result.get("repo_name", "")}',
+                        '{result.get("ref", "")}',
+                        {result.get("total_files", 0)},
+                        {result.get("total_calls", 0)},
+                        {result.get("parse_success_count", 0)},
+                        {result.get("parse_error_count", 0)},
+                        '{summary_json}',
+                        '{analysis_ts_str}',
+                        '{result.get("status", "success")}',
+                        {error_escaped}
+                    )
+                """
+                self._execute_query(insert_sql, fetch=False)
+
+            logger.info(f"✅ Wrote {len(results)} Java analysis results to {table_name}")
+            return len(results)
 
         except Exception as e:
             logger.error(f"❌ Failed to write Java analysis results: {e}")
@@ -619,66 +627,52 @@ class UCIntegration:
         Returns:
             analysis_id: Generated UUID
         """
-        spark = self._get_spark()
         cat = catalog or self.catalog
         sch = schema or self.schema
 
         try:
             analysis_id = str(uuid.uuid4())
             analysis_ts = datetime.now()
-
-            # Prepare data
-            rows = [
-                (
-                    analysis_id,
-                    repo_id,
-                    library,
-                    from_version,
-                    to_version,
-                    summary.get("breaking_changes_count", 0),
-                    summary.get("affected_files", 0),
-                    summary.get("affected_invocations", 0),
-                    breaking_changes,
-                    patches,
-                    summary.get("migration_complexity", "medium"),
-                    summary.get("estimated_effort_hours", 0.0),
-                    summary.get("auto_fixable_percent", 0.0),
-                    summary.get("patches_generated", 0),
-                    summary.get("patches_high_confidence", 0),
-                    summary.get("patches_medium_confidence", 0),
-                    summary.get("patches_low_confidence", 0),
-                    analysis_ts,
-                    "completed",
-                )
-            ]
-
-            columns = [
-                "analysis_id",
-                "repo_id",
-                "library",
-                "from_version",
-                "to_version",
-                "breaking_changes_count",
-                "affected_files",
-                "affected_invocations",
-                "breaking_changes",
-                "patches",
-                "migration_complexity",
-                "estimated_effort_hours",
-                "auto_fixable_percent",
-                "patches_generated",
-                "patches_high_confidence",
-                "patches_medium_confidence",
-                "patches_low_confidence",
-                "analysis_ts",
-                "status",
-            ]
-
-            df = spark.createDataFrame(rows, columns)
-
-            # Write to UC table
+            analysis_ts_str = analysis_ts.strftime("%Y-%m-%d %H:%M:%S")
             table_name = f"{cat}.{sch}.{table}"
-            df.write.mode("append").saveAsTable(table_name)
+
+            # Escape JSON data for SQL
+            breaking_changes_json = json.dumps(breaking_changes).replace("'", "''")
+            patches_json = json.dumps(patches).replace("'", "''")
+
+            insert_sql = f"""
+                INSERT INTO {table_name} 
+                (analysis_id, repo_id, library, from_version, to_version,
+                 breaking_changes_count, affected_files, affected_invocations,
+                 breaking_changes, patches, migration_complexity, 
+                 estimated_effort_hours, auto_fixable_percent,
+                 patches_generated, patches_high_confidence, 
+                 patches_medium_confidence, patches_low_confidence,
+                 analysis_ts, status)
+                VALUES (
+                    '{analysis_id}',
+                    '{repo_id}',
+                    '{library}',
+                    '{from_version}',
+                    '{to_version}',
+                    {summary.get("breaking_changes_count", 0)},
+                    {summary.get("affected_files", 0)},
+                    {summary.get("affected_invocations", 0)},
+                    '{breaking_changes_json}',
+                    '{patches_json}',
+                    '{summary.get("migration_complexity", "medium")}',
+                    {summary.get("estimated_effort_hours", 0.0)},
+                    {summary.get("auto_fixable_percent", 0.0)},
+                    {summary.get("patches_generated", 0)},
+                    {summary.get("patches_high_confidence", 0)},
+                    {summary.get("patches_medium_confidence", 0)},
+                    {summary.get("patches_low_confidence", 0)},
+                    '{analysis_ts_str}',
+                    'completed'
+                )
+            """
+            
+            self._execute_query(insert_sql, fetch=False)
 
             logger.info(f"✅ Wrote migration analysis {analysis_id} to {table_name}")
             return analysis_id
