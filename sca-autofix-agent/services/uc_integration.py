@@ -78,14 +78,42 @@ class UCIntegration:
                 # Use Databricks SDK for authentication (works in Databricks Apps)
                 w = WorkspaceClient()
                 
-                # Get SQL warehouse or serverless endpoint
-                # For Databricks Apps, we use the serverless SQL warehouse
+                # Get SQL warehouse HTTP path from environment or find one
+                http_path = os.environ.get("SQL_WAREHOUSE_HTTP_PATH")
+                
+                if not http_path:
+                    # Try to find an available SQL warehouse
+                    warehouses = list(w.warehouses.list())
+                    if warehouses:
+                        # Prefer serverless, then running, then any
+                        for wh in warehouses:
+                            if wh.enable_serverless_compute:
+                                http_path = f"/sql/1.0/warehouses/{wh.id}"
+                                logger.info(f"🔷 Using serverless warehouse: {wh.name}")
+                                break
+                        if not http_path:
+                            for wh in warehouses:
+                                if str(wh.state) == "RUNNING":
+                                    http_path = f"/sql/1.0/warehouses/{wh.id}"
+                                    logger.info(f"🔷 Using running warehouse: {wh.name}")
+                                    break
+                        if not http_path:
+                            wh = warehouses[0]
+                            http_path = f"/sql/1.0/warehouses/{wh.id}"
+                            logger.info(f"🔷 Using warehouse: {wh.name}")
+                    else:
+                        raise RuntimeError("No SQL warehouses available. Please configure SQL_WAREHOUSE_HTTP_PATH.")
+                
+                # Get hostname
+                hostname = w.config.host.replace("https://", "").replace("http://", "")
+                
+                # Connect using SDK credentials
                 self._connection = sql.connect(
-                    server_hostname=w.config.host.replace("https://", ""),
-                    http_path="/sql/1.0/warehouses/auto",  # Serverless
-                    credentials_provider=lambda: w.config.authenticate,
+                    server_hostname=hostname,
+                    http_path=http_path,
+                    credentials_provider=w.config.authenticate,
                 )
-                logger.info("✅ Connected to Databricks SQL")
+                logger.info(f"✅ Connected to Databricks SQL at {hostname}")
             except ImportError as e:
                 logger.error(f"❌ databricks-sql-connector not available: {e}")
                 raise RuntimeError(
