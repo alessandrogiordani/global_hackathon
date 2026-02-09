@@ -21,7 +21,7 @@ from .utils import header_store
 
 # Create MCP server instance with stateless HTTP mode for scalability
 mcp_server = FastMCP(
-    name="vulnerability-scanner-mcp",
+    name="mcp-sca-autofix-agent",
     stateless_http=True,
     json_response=True
 )
