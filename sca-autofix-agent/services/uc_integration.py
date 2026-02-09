@@ -47,7 +47,7 @@ def _get_mock_data_path() -> Path:
 class UCIntegration:
     """Unity Catalog integration for vulnerability analysis workflow."""
 
-    def __init__(self, catalog: str = "main", schema: str = "sca_autofix"):
+    def __init__(self, catalog: str = "ing_hackathon", schema: str = "ing_hackathon"):
         """
         Initialize UC integration.
 
