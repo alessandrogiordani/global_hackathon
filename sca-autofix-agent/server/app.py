@@ -9,7 +9,6 @@ This module sets up the core application by:
 5. Optionally serving static files for a web frontend
 """
 
-import contextlib
 from pathlib import Path
 
 from starlette.applications import Starlette
@@ -70,21 +69,14 @@ async def health_check(request):
 # Combined Application Setup
 # ============================================================================
 
-# Create a lifespan context manager to run the session manager
-@contextlib.asynccontextmanager
-async def lifespan(app):
-    async with mcp_server.session_manager.run():
-        yield
-
-
 # Create the final application by combining MCP routes with custom API routes
+# For stateless HTTP mode, no explicit session_manager lifespan is needed
 combined_app = Starlette(
     routes=[
         Route("/", serve_index),
         Route("/health", health_check),
         Mount("/mcp", app=mcp_server.streamable_http_app()),
     ],
-    lifespan=lifespan,
 )
 
 
