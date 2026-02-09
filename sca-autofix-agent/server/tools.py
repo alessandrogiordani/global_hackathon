@@ -549,7 +549,7 @@ def load_tools(mcp_server):
     @mcp_server.tool
     def get_sca_findings_from_uc(
         catalog: str = "ing_hackathon",
-        schema: str = "sca_advisor",
+        schema: str = "ing_hackathon",
         status: str = "ready",
         priority: int = None,
         limit: int = 100,
@@ -633,7 +633,7 @@ def load_tools(mcp_server):
         breaking_changes: list[str],
         notes: str = "",
         catalog: str = "ing_hackathon",
-        schema: str = "sca_advisor",
+        schema: str = "ing_hackathon",
     ) -> dict:
         """
         Write PYTHON package analysis results to Unity Catalog.
@@ -718,7 +718,7 @@ def load_tools(mcp_server):
         user_email: str,
         decision_reason: str = "",
         catalog: str = "ing_hackathon",
-        schema: str = "sca_advisor",
+        schema: str = "ing_hackathon",
     ) -> dict:
         """
         Record user decision (approve/reject) to UC audit table.
@@ -1155,7 +1155,7 @@ def load_tools(mcp_server):
         patches: list,
         summary: dict,
         catalog: str = "ing_hackathon",
-        schema: str = "sca_advisor",
+        schema: str = "ing_hackathon",
     ) -> dict:
         """
         ⭐ PRIMARY TOOL FOR JAVA LIBRARY MIGRATION WORKFLOW
