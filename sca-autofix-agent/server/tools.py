@@ -43,7 +43,7 @@ def load_tools(mcp_server):
         mcp_server: The FastMCP server instance to register tools with
     """
 
-    @mcp_server.tool
+    @mcp_server.tool()
     def scan_repo_dependencies(repo_path: str, branch: str = "main") -> dict:
         """
         Scan a Databricks Repo to extract all library dependencies.

@@ -14,7 +14,8 @@ from pathlib import Path
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse, FileResponse
 from starlette.routing import Route, Mount
-from mcp.server.fastmcp import FastMCP
+#from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 from .tools import load_tools
 from .utils import header_store
